@@ -60,6 +60,18 @@ def unavailable_product(category):
 
 
 @pytest.fixture
+def featured_product(category):
+    return Product.objects.create(
+        name="Oracle Desk Lamp",
+        slug="oracle-desk-lamp",
+        tagline="It knows when you're done reading.",
+        price=Decimal("89.00"),
+        is_featured=True,
+        category=category,
+    )
+
+
+@pytest.fixture
 def tag(db):
     return Tag.objects.create(name="bestseller", slug="bestseller")
 
