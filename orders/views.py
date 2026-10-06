@@ -160,26 +160,27 @@ class CheckoutView(LoginRequiredMixin, FormView):
         return redirect(reverse("orders:confirmation", kwargs={"pk": order.pk}))
 
 
-class AddressFieldsView(LoginRequiredMixin, View):
+class AddressFieldsView(LoginRequiredMixin, TemplateView):
     """HTMX: re-render one checkout address section filled from a saved address.
 
     ``?section=shipping|billing&address=<pk>``. The address is fetched
     through its owner — another customer's pk 404s.
     """
 
-    def get(self, request):
-        section = request.GET.get("section")
-        pk = request.GET.get("address", "")
+    template_name = "orders/partials/_address_fields.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        section = self.request.GET.get("section")
+        pk = self.request.GET.get("address", "")
         if section not in ("shipping", "billing") or not pk.isdigit():
             raise Http404
-        address = get_object_or_404(Address, pk=pk, user=request.user)
+        address = get_object_or_404(Address, pk=pk, user=self.request.user)
         form = CheckoutForm(
             initial={f"{section}_{f}": getattr(address, f) for f in Address.FIELDS}
         )
-        fields = getattr(form, f"{section}_fields")()
-        return render(
-            request, "orders/partials/_address_fields.html", {"fields": fields}
-        )
+        context["fields"] = getattr(form, f"{section}_fields")()
+        return context
 
 
 # --- The address book ---------------------------------------------------------
@@ -201,6 +202,9 @@ class OwnAddressesMixin(LoginRequiredMixin):
 class AddressListView(OwnAddressesMixin, ListView):
     template_name = "orders/address_list.html"
     context_object_name = "addresses"
+
+    def get_queryset(self):
+        return super().get_queryset().order_by("name")
 
 
 class AddressCreateView(OwnAddressesMixin, SuccessMessageMixin, CreateView):
