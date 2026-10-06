@@ -18,6 +18,7 @@
           · <span class="font-semibold">${{ order.total|intcomma }}</span>
           · card ending {{ order.card_last4 }}
         </p>
+        {% include "orders/partials/_discount_line.html" %}
         <p class="text-sm opacity-70">A confirmation will reach {{ order.email }} eventually.</p>
       </div>
     </div>

@@ -1,0 +1,12 @@
+{% load humanize %}
+{# An order's subtotal and discount, from the copy taken at checkout — #}
+{# never the live code. Renders nothing for an undiscounted order. #}
+{% if order.discount_code %}
+  <div class="text-sm">
+    <p class="opacity-70">Subtotal ${{ order.subtotal|intcomma }}</p>
+    <p class="text-success">
+      Discount ({{ order.discount_code }}, {{ order.discount_percent }}%)
+      −${{ order.discount_amount|intcomma }}
+    </p>
+  </div>
+{% endif %}

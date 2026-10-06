@@ -1,12 +1,17 @@
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 from products.models import Product
 
-from .validators import zip_validator
+from .validators import discount_code_validator, zip_validator
+
+ZERO = Decimal("0.00")
+CENT = Decimal("0.01")
 
 US_STATES = [
     ("AL", "Alabama"),
@@ -63,6 +68,126 @@ US_STATES = [
 ]
 
 
+class InvalidDiscountCode(ValueError):
+    """A discount code that can't be used; the message is customer-facing."""
+
+
+class DiscountCodeQuerySet(models.QuerySet):
+    def redeem(self, text, products):
+        """The code ``text`` names, provided it can be used on ``products``.
+
+        Case and surrounding spaces don't matter. Raises
+        ``InvalidDiscountCode`` saying why when the code is unknown,
+        retired, expired, or covers none of ``products``.
+        """
+        code = self.filter(code=DiscountCode.normalize(text)).first()
+        if code is None:
+            raise InvalidDiscountCode("We don't recognize that discount code.")
+        if code.status == DiscountCode.Status.RETIRED:
+            raise InvalidDiscountCode("That discount code is no longer active.")
+        if code.status == DiscountCode.Status.EXPIRED:
+            raise InvalidDiscountCode("That discount code has expired.")
+        if not code.applies_to(products):
+            raise InvalidDiscountCode(
+                "That discount code doesn't apply to anything in your cart."
+            )
+        return code
+
+
+class DiscountCode(models.Model):
+    """A percentage off, entered at checkout.
+
+    With no ``products`` the code discounts the whole order; with some,
+    only those products' lines. A code works while it is active and
+    unexpired — retiring it (``is_active=False``) is reversible. Orders
+    copy the code, percent, and amounts, so editing, retiring, or even
+    deleting a code never touches order history.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        EXPIRED = "EXPIRED", "Expired"
+        RETIRED = "RETIRED", "Retired"
+
+    code = models.CharField(
+        max_length=30,
+        unique=True,
+        validators=[discount_code_validator],
+        help_text="Customers can type it in any case.",
+    )
+    percent = models.PositiveSmallIntegerField(
+        "Percent off",
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+    )
+    products = models.ManyToManyField(
+        Product,
+        blank=True,
+        related_name="discount_codes",
+        help_text="Leave empty to discount the whole order.",
+    )
+    expires_at = models.DateTimeField(
+        "Expires at", null=True, blank=True, help_text="Leave empty to never expire."
+    )
+    is_active = models.BooleanField(
+        "Active", default=True, help_text="Untick to retire the code."
+    )
+
+    objects = DiscountCodeQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(percent__gte=1, percent__lte=100),
+                name="discount_percent_1_to_100",
+            )
+        ]
+
+    def __str__(self):
+        return self.code
+
+    def save(self, *args, **kwargs):
+        self.code = self.normalize(self.code)
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def normalize(text):
+        """The stored form of a typed code: trimmed and uppercased."""
+        return (text or "").strip().upper()
+
+    @property
+    def status(self):
+        """Retired beats expired: a switched-off code reads as retired."""
+        if not self.is_active:
+            return self.Status.RETIRED
+        if self.expires_at is not None and self.expires_at <= timezone.now():
+            return self.Status.EXPIRED
+        return self.Status.ACTIVE
+
+    @property
+    def is_order_wide(self):
+        return not self._product_ids
+
+    @cached_property
+    def _product_ids(self):
+        return set(self.products.values_list("pk", flat=True))
+
+    def covers(self, product):
+        """Whether this code discounts ``product``'s lines."""
+        return self.is_order_wide or product.pk in self._product_ids
+
+    def applies_to(self, products):
+        """Whether this code discounts any of ``products``."""
+        return any(self.covers(product) for product in products)
+
+    def discount_on(self, product, amount):
+        """Money off a line of ``product`` worth ``amount``, rounded half-up
+        to the cent; zero when the code doesn't cover the product."""
+        if not self.covers(product):
+            return ZERO
+        return (amount * self.percent / 100).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
 class Cart(models.Model):
     """A customer's cart — one per user, created lazily on first touch."""
 
@@ -94,7 +219,16 @@ class Cart(models.Model):
         return self.items.select_related("product")
 
     def total(self):
-        return sum((item.line_total for item in self.lines()), Decimal("0.00"))
+        return sum((item.line_total for item in self.lines()), ZERO)
+
+    def discount(self, code):
+        """Money off this cart under ``code``; zero when ``code`` is ``None``."""
+        if code is None:
+            return ZERO
+        return sum(
+            (code.discount_on(item.product, item.line_total) for item in self.lines()),
+            ZERO,
+        )
 
     def item_count(self):
         """Total units across all lines — the navbar badge number."""
@@ -139,7 +273,8 @@ class Order(models.Model):
 
     Addresses are flat denormalized fields: the order must not change if
     the customer later edits anything. Of the card, only the last four
-    digits survive checkout.
+    digits survive checkout. ``total`` is what was charged — after any
+    discount.
     """
 
     class Status(models.TextChoices):
@@ -175,6 +310,20 @@ class Order(models.Model):
 
     card_last4 = models.CharField(max_length=4)
 
+    # The discount as granted at checkout — copied, so the order is immune
+    # to later edits of the code. ``discount`` is only a live link for
+    # staff, and goes null if the code is ever deleted.
+    discount = models.ForeignKey(
+        DiscountCode,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    discount_code = models.CharField(max_length=30, blank=True)
+    discount_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)
+
     # default (not auto_now_add) so the seed can backdate orders.
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -188,6 +337,11 @@ class Order(models.Model):
     def number(self):
         """The customer-facing order number, e.g. ``TT-2026-00042``."""
         return f"TT-{self.created_at.year}-{self.pk:05d}"
+
+    @property
+    def subtotal(self):
+        """The order's value before its discount."""
+        return self.total + self.discount_amount
 
 
 class OrderItem(models.Model):
@@ -203,6 +357,8 @@ class OrderItem(models.Model):
     product_name = models.CharField(max_length=200)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField()
+    # This line's share of the order's discount; the lines sum to it exactly.
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)
 
     class Meta:
         ordering = ["pk"]
@@ -213,6 +369,10 @@ class OrderItem(models.Model):
     @property
     def line_total(self):
         return self.unit_price * self.quantity
+
+    @property
+    def discounted_total(self):
+        return self.line_total - self.discount_amount
 
 
 class AddressQuerySet(models.QuerySet):

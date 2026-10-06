@@ -1,0 +1,4 @@
+{% load humanize %}
+{# The amount on the Place order button. Include with oob=True to swap it #}
+{# out-of-band when a discount preview changes the total. #}
+<span id="checkout-total" {% if oob %}hx-swap-oob="true"{% endif %}>${{ total|intcomma }}</span>

@@ -1,7 +1,8 @@
 """Checkout's custom validators — small, pure, and unit-testable.
 
 The card checks are plain functions that raise ``ValidationError``, and
-the ZIP rule is a ``RegexValidator``. All are wired in through
+the ZIP and discount-code shape rules are ``RegexValidator`` instances.
+All are wired in through
 ``validators=[...]`` so every rule stays visible at the field
 declaration. No form or view logic lives here.
 """
@@ -14,6 +15,11 @@ from django.core.validators import RegexValidator
 # Shared by checkout's address fields and the saved ``Address`` model.
 zip_validator = RegexValidator(
     r"^\d{5}(-\d{4})?$", "Enter a ZIP code like 79016 or 79016-1234."
+)
+
+# The shape of a stored discount code, checked after uppercasing.
+discount_code_validator = RegexValidator(
+    r"^[A-Z0-9-]+$", "Use letters, numbers, and dashes only."
 )
 
 

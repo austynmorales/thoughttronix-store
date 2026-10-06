@@ -5,17 +5,51 @@ annotations: field types validate (``EmailField``), field arguments
 validate (``required``, ``max_length``, ``ChoiceField``), and the
 ``validators=[...]`` list carries the rest. No ``clean_*`` methods
 and no ``clean()`` — none of its current rules need imperative validation.
+Even the discount code, which must be checked against the cart, is a
+validator: the form builds it from the cart it is given.
 """
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 
 from products.forms import StyledModelForm
 
-from .models import US_STATES, Address, Order
+from .models import (
+    US_STATES,
+    Address,
+    DiscountCode,
+    InvalidDiscountCode,
+    Order,
+)
 from .validators import validate_card_number, validate_expiry, zip_validator
 
 cvv_validator = RegexValidator(r"^\d{3,4}$", "Enter the 3- or 4-digit CVV.")
+
+
+class DiscountCodeField(forms.CharField):
+    """A code field that cleans to the stored form: trimmed, uppercased."""
+
+    def to_python(self, value):
+        return DiscountCode.normalize(super().to_python(value))
+
+
+class RedeemableCodeValidator:
+    """Reject a discount code that can't be used on ``products`` right now.
+
+    The rules themselves live in ``DiscountCode.objects.redeem`` — the
+    same call ``place_order`` makes — so the form and the service can't
+    disagree.
+    """
+
+    def __init__(self, products):
+        self.products = list(products)
+
+    def __call__(self, value):
+        try:
+            DiscountCode.objects.redeem(value, self.products)
+        except InvalidDiscountCode as error:
+            raise ValidationError(str(error), code="discount_code") from None
 
 
 class CheckoutForm(forms.Form):
@@ -59,8 +93,18 @@ class CheckoutForm(forms.Form):
     )
     card_cvv = forms.CharField(label="CVV", max_length=4, validators=[cvv_validator])
 
-    def __init__(self, *args, **kwargs):
+    discount_code = DiscountCodeField(
+        label="Discount code", max_length=30, required=False
+    )
+
+    def __init__(self, *args, cart=None, **kwargs):
+        """``cart`` is what a discount code must apply to; without one
+        (e.g. the address-fields partial), the code field goes unchecked."""
         super().__init__(*args, **kwargs)
+        if cart is not None:
+            self.fields["discount_code"].validators.append(
+                RedeemableCodeValidator(line.product for line in cart.lines())
+            )
         for field in self.fields.values():
             widget = field.widget
             if isinstance(widget, forms.CheckboxInput):
@@ -92,6 +136,33 @@ class AddressForm(StyledModelForm):
     class Meta:
         model = Address
         fields = [*Address.FIELDS, "is_default_shipping", "is_default_billing"]
+
+
+class DiscountCodeForm(StyledModelForm):
+    """Create or edit a discount code in the back office.
+
+    The code is uppercased before the uniqueness check, so ``thoughts10``
+    collides with an existing ``THOUGHTS10`` as it should.
+    """
+
+    code = DiscountCodeField(
+        max_length=30, help_text=DiscountCode._meta.get_field("code").help_text
+    )
+
+    class Meta:
+        model = DiscountCode
+        fields = ["code", "percent", "products", "expires_at", "is_active"]
+        widgets = {
+            "expires_at": forms.DateTimeInput(
+                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["products"].queryset = self.fields["products"].queryset.order_by(
+            "name"
+        )
 
 
 class OrderStatusForm(forms.ModelForm):

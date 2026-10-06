@@ -1,0 +1,59 @@
+{% load humanize %}
+{# The checkout order summary with its discount-code box. The Apply button #}
+{# re-renders this partial over itself; the code input belongs to the #}
+{# checkout form via form="checkout-form", so the final POST carries it. #}
+<div id="order-summary" class="card bg-base-100 shadow-md">
+  <div class="card-body">
+    <h2 class="card-title">Your order</h2>
+    <ul class="space-y-2">
+      {% for item in cart.lines %}
+        <li class="flex justify-between gap-4 text-sm">
+          <span>{{ item.quantity }} × {{ item.product.name }}</span>
+          <span class="whitespace-nowrap">${{ item.line_total|intcomma }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="divider my-2"></div>
+    {% if code %}
+      <p class="flex justify-between text-sm">
+        <span>Subtotal</span>
+        <span>${{ cart.total|intcomma }}</span>
+      </p>
+      <p class="flex justify-between text-sm text-success">
+        <span>Discount ({{ code.code }}, {{ code.percent }}%)</span>
+        <span class="whitespace-nowrap">−${{ discount|intcomma }}</span>
+      </p>
+    {% endif %}
+    <p class="flex justify-between font-semibold">
+      <span>Total</span>
+      <span class="text-primary">${{ total|intcomma }}</span>
+    </p>
+
+    <div class="mt-4">
+      <label class="label mb-1" for="id_discount_code">Discount code</label>
+      <div class="join w-full">
+        <input type="text" name="discount_code" id="id_discount_code"
+               form="checkout-form" maxlength="30" value="{{ code_text }}"
+               class="input join-item w-full uppercase"
+               autocomplete="off">
+        <button type="button" class="btn join-item"
+                hx-post="{% url 'orders:discount_preview' %}"
+                hx-include="#id_discount_code"
+                hx-target="#order-summary"
+                hx-swap="outerHTML">Apply</button>
+      </div>
+      {% if discount_error %}
+        <p class="mt-1 text-sm text-error">{{ discount_error }}</p>
+      {% elif code %}
+        <p class="mt-1 text-sm text-success">
+          {% if code.is_order_wide %}Applied to your whole order.{% else %}Applied to eligible items.{% endif %}
+        </p>
+      {% endif %}
+    </div>
+
+    <a href="{% url 'orders:cart' %}" class="link link-hover mt-2 text-sm opacity-70">
+      Edit cart
+    </a>
+  </div>
+</div>
+{% if oob %}{% include "orders/partials/_checkout_total.html" with oob=True %}{% endif %}

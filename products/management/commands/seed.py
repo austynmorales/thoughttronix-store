@@ -21,7 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from orders.models import Address, Cart, Order, OrderItem
+from orders.models import ZERO, Address, Cart, DiscountCode, Order, OrderItem
 from products.models import Category, Product, Tag
 
 TAGS = [
@@ -470,15 +470,46 @@ CUSTOMER_CART = [
     ("whisper-alarm-clock", 1),
 ]
 
-# The customer demo login's visible order history: (days ago, status,
-# [(product slug, quantity), ...]). Statuses follow age, like the
-# background orders, plus one recent order still in flight.
-CUSTOMER_ORDERS = [
-    (124, Order.Status.DELIVERED, [("mindsync", 1), ("syncrest", 1)]),
-    (47, Order.Status.DELIVERED, [("dreamweaver", 1)]),
-    (9, Order.Status.SHIPPED, [("seraphine-mini", 2), ("seraphine-wall-mount", 1)]),
-    (2, Order.Status.PLACED, [("veil", 1)]),
+# Discount codes, one in each state: (code, percent, [product slugs] —
+# empty for order-wide, expires in days (negative: already expired, None:
+# never), is_active).
+DISCOUNT_CODES = [
+    ("THOUGHTS10", 10, [], None, True),
+    (
+        "HUB20",
+        20,
+        [
+            "seraphine",
+            "seraphine-mini",
+            "seraphine-doorbell",
+            "seraphine-kitchen-display",
+        ],
+        60,
+        True,
+    ),
+    ("SUMMER25", 25, [], -30, True),
+    ("LAUNCH15", 15, ["mindsync", "mindsync-lite"], None, False),
 ]
+
+# The customer demo login's visible order history: (days ago, status,
+# [(product slug, quantity), ...], discount code or None). Statuses follow
+# age, like the background orders, plus one recent order still in flight.
+# The oldest two used codes that have since been retired and expired —
+# their orders still show the discount they got.
+CUSTOMER_ORDERS = [
+    (124, Order.Status.DELIVERED, [("mindsync", 1), ("syncrest", 1)], "LAUNCH15"),
+    (47, Order.Status.DELIVERED, [("dreamweaver", 1)], "SUMMER25"),
+    (
+        9,
+        Order.Status.SHIPPED,
+        [("seraphine-mini", 2), ("seraphine-wall-mount", 1)],
+        "HUB20",
+    ),
+    (2, Order.Status.PLACED, [("veil", 1)], None),
+]
+
+# Every sixth background order used the evergreen order-wide code.
+BACKGROUND_DISCOUNT_EVERY = 6
 
 # Background orders spread across the trailing six months so the Phase 7
 # dashboard has a real time axis. 48 here + 4 above = 52 total.
@@ -506,6 +537,7 @@ class Command(BaseCommand):
         tags = self._create_tags()
         self._create_catalog(tags)
         self._create_users()
+        self._create_discount_codes()
         self._create_customer_cart()
         self._create_customer_addresses()
         self._create_orders()
@@ -517,6 +549,7 @@ class Command(BaseCommand):
                 f"{Product.objects.count()} products, "
                 f"{get_user_model().objects.count()} users, "
                 f"{Order.objects.count()} orders, "
+                f"{DiscountCode.objects.count()} discount codes, "
                 f"and a live cart and {Address.objects.count()} saved addresses "
                 f"for 'customer'."
             )
@@ -525,6 +558,7 @@ class Command(BaseCommand):
     def _wipe(self):
         """Remove everything the seed owns; the rebuild starts from zero."""
         Order.objects.all().delete()
+        DiscountCode.objects.all().delete()
         Cart.objects.all().delete()
         Product.objects.all().delete()
         Tag.objects.all().delete()
@@ -582,6 +616,17 @@ class Command(BaseCommand):
             user.set_unusable_password()
             user.save()
 
+    def _create_discount_codes(self):
+        now = timezone.now()
+        for code, percent, slugs, expires_in, is_active in DISCOUNT_CODES:
+            discount = DiscountCode.objects.create(
+                code=code,
+                percent=percent,
+                expires_at=None if expires_in is None else now + timedelta(expires_in),
+                is_active=is_active,
+            )
+            discount.products.set(Product.objects.filter(slug__in=slugs))
+
     def _create_customer_cart(self):
         customer = get_user_model().objects.get(username="customer")
         cart = Cart.for_user(customer)
@@ -622,8 +667,10 @@ class Command(BaseCommand):
         now = timezone.now()
         User = get_user_model()
 
+        codes = {code.code: code for code in DiscountCode.objects.all()}
+
         customer = User.objects.get(username="customer")
-        for days_ago, status, lines in CUSTOMER_ORDERS:
+        for days_ago, status, lines, code in CUSTOMER_ORDERS:
             self._build_order(
                 user=customer,
                 created_at=now - timedelta(days=days_ago, hours=rng.randint(1, 12)),
@@ -633,6 +680,7 @@ class Command(BaseCommand):
                     for slug, quantity in lines
                 ],
                 rng=rng,
+                code=codes.get(code),
             )
 
         background = list(
@@ -647,7 +695,7 @@ class Command(BaseCommand):
             .exclude(category__slug="defense")
             .order_by("slug")
         )
-        for _ in range(BACKGROUND_ORDER_COUNT):
+        for index in range(BACKGROUND_ORDER_COUNT):
             # Weighted toward today (business is good) so the dashboard's
             # default 30-day view has enough bars to read as a chart.
             days_ago = int(rng.triangular(0, 182, 0))
@@ -666,19 +714,36 @@ class Command(BaseCommand):
                     for product in rng.sample(pool, rng.randint(1, 3))
                 ],
                 rng=rng,
+                code=codes["THOUGHTS10"]
+                if index % BACKGROUND_DISCOUNT_EVERY == 0
+                else None,
             )
 
-    def _build_order(self, *, user, created_at, status, lines, rng):
-        """One order with denormalized addresses and purchase-time prices."""
+    def _build_order(self, *, user, created_at, status, lines, rng, code=None):
+        """One order with denormalized addresses and purchase-time prices.
+
+        A ``code`` is applied with the same per-line maths as checkout
+        (``DiscountCode.discount_on``), whatever the code's state today.
+        """
         street, city, state, zip_code = rng.choice(SEED_ADDRESSES)
         name = f"{user.first_name} {user.last_name}"
+        line_discounts = [
+            code.discount_on(product, product.price * quantity) if code else ZERO
+            for product, quantity in lines
+        ]
+        discount = sum(line_discounts, ZERO)
         order = Order.objects.create(
             user=user,
             status=status,
             total=sum(
                 (product.price * quantity for product, quantity in lines),
-                Decimal("0.00"),
-            ),
+                ZERO,
+            )
+            - discount,
+            discount=code,
+            discount_code=code.code if code else "",
+            discount_percent=code.percent if code else None,
+            discount_amount=discount,
             email=user.email,
             shipping_name=name,
             shipping_street=street,
@@ -693,11 +758,14 @@ class Command(BaseCommand):
             card_last4=rng.choice(CARD_LAST4S),
             created_at=created_at,
         )
-        for product, quantity in lines:
+        for (product, quantity), line_discount in zip(
+            lines, line_discounts, strict=True
+        ):
             OrderItem.objects.create(
                 order=order,
                 product=product,
                 product_name=product.name,
                 unit_price=product.price,
                 quantity=quantity,
+                discount_amount=line_discount,
             )

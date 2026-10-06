@@ -9,7 +9,7 @@ from decimal import Decimal
 import pytest
 from django.contrib.auth import get_user_model
 
-from orders.models import Address, Cart, CartItem
+from orders.models import Address, Cart, CartItem, DiscountCode
 from products.models import Category, Product, Tag
 
 
@@ -99,3 +99,17 @@ def address(customer):
         is_default_shipping=True,
         is_default_billing=True,
     )
+
+
+@pytest.fixture
+def order_wide_code(db):
+    """10% off the whole order, active, never expires."""
+    return DiscountCode.objects.create(code="THOUGHTS10", percent=10)
+
+
+@pytest.fixture
+def product_code(product):
+    """20% off the Seraphine Home Hub only."""
+    code = DiscountCode.objects.create(code="HUB20", percent=20)
+    code.products.add(product)
+    return code

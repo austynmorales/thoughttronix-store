@@ -1,0 +1,31 @@
+{% extends "backoffice/base.html" %}
+
+{% block title %}
+  {% if form.instance.pk %}Edit discount code{% else %}New discount code{% endif %} — Back office
+{% endblock %}
+
+{% block backoffice %}
+  <div class="card mx-auto max-w-2xl bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title">
+        {% if form.instance.pk %}Edit {{ form.instance.code }}{% else %}New discount code{% endif %}
+      </h2>
+      <p class="text-sm opacity-70">
+        Orders keep their own copy of the discount, so changes here never touch past orders.
+      </p>
+      <form method="post" class="mt-2 space-y-4">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+          <div class="alert alert-error" role="alert"><span>{{ error }}</span></div>
+        {% endfor %}
+        {% for field in form %}
+          {% include "products/partials/_field.html" %}
+        {% endfor %}
+        <div class="mt-2 flex items-center justify-end gap-2">
+          <a href="{% url 'orders:manage_discounts' %}" class="btn btn-ghost">Cancel</a>
+          <button type="submit" class="btn btn-primary">Save code</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

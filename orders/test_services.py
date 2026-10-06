@@ -124,10 +124,13 @@ def test_a_failure_midway_leaves_no_partial_order(
     assert CartItem.objects.count() == 2
 
 
-def test_the_coupon_seam_is_accepted_and_ignored(cart, cart_item, checkout_data):
-    order = place_order(cart, cart.user, checkout_data, coupon_code="THOUGHTS10")
+def test_no_coupon_means_no_discount(cart, cart_item, checkout_data):
+    order = place_order(cart, cart.user, checkout_data)
 
-    assert order.total == Decimal("699.98")
+    assert order.discount is None
+    assert order.discount_code == ""
+    assert order.discount_amount == Decimal("0.00")
+    assert order.items.get().discount_amount == Decimal("0.00")
 
 
 # --- Saving to the address book ----------------------------------------------
