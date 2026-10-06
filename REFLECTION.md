@@ -1,3 +1,11 @@
+# Discount Coupons
+
+## Question 1 - One decision from grill me
+One question from grill me that made me think was whether a discount code should apply to the whole order or only certain products. At first I was not completely sure how the two options would work differently. After going through the questions, I decided the system should support both types. This made sense because some promotions could discount an entire purchase while others could be used for a specific product. This decision affected how the coupon feature was designed because it needed to know which products were eligible for each discount.
+
+## Question 2 - The change
+After reviewing the discount coupon feature, I noticed there could be a problem with the expiration time for the coupons. The expiration time was being handled in UTC instead of the store's local time. This could cause a coupon to expire earlier or later than expected for the customer. I decided to change it so the expiration time uses the store's time zone. After making the change, I checked the feature again to make sure the coupons expired at the correct time and that the rest of the discount feature still worked correctly.
+
 ## Featured Products
 
 ### Question 1 - Trace the feature
