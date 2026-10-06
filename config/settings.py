@@ -121,7 +121,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+# The store's own clock: what staff type (discount expiries) and what the
+# site shows are in this zone. Datetimes are still stored as UTC.
+TIME_ZONE = env.str("TIME_ZONE", default="America/Chicago")
 
 USE_I18N = True
 

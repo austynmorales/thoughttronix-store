@@ -37,7 +37,7 @@
                 {% for product in code.products.all %}{{ product.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="opacity-70">Whole order</span>{% endfor %}
               </td>
               <td class="text-sm">
-                {% if code.expires_at %}{{ code.expires_at|date:"M j, Y H:i" }}{% else %}<span class="opacity-70">Never</span>{% endif %}
+                {% if code.expires_at %}{{ code.expires_at|date:"M j, Y H:i T" }}{% else %}<span class="opacity-70">Never</span>{% endif %}
               </td>
               <td>
                 {% if code.status == "ACTIVE" %}

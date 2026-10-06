@@ -1,7 +1,7 @@
 """Discount codes: the model's rules, place_order's discounting and
 snapshot, the checkout form and preview, and the back-office screens."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from http import HTTPStatus
 
@@ -376,6 +376,25 @@ def test_codes_are_unique_regardless_of_case(client, staff_user, order_wide_code
     assert response.status_code == HTTPStatus.OK
     assert "already exists" in response.content.decode()
     assert DiscountCode.objects.count() == 1
+
+
+def test_expiry_is_typed_and_shown_in_store_time(client, staff_user, settings):
+    """Staff type local wall-clock time, not UTC — and see the zone named."""
+    settings.TIME_ZONE = "America/Chicago"
+    client.force_login(staff_user)
+
+    form_page = client.get(reverse("orders:manage_discount_create")).content.decode()
+    client.post(
+        reverse("orders:manage_discount_create"),
+        {"code": "NYE", "percent": "10", "expires_at": "2026-12-31T23:59"},
+    )
+
+    assert "Store time (America/Chicago)" in form_page
+    # 23:59 CST (UTC-6) is 05:59 UTC the next morning.
+    expected = datetime(2027, 1, 1, 5, 59, tzinfo=UTC)
+    assert DiscountCode.objects.get().expires_at == expected
+    list_page = client.get(reverse("orders:manage_discounts")).content.decode()
+    assert "Dec 31, 2026 23:59 CST" in list_page
 
 
 def test_staff_retire_a_code_by_unticking_active(client, staff_user, order_wide_code):

@@ -12,6 +12,7 @@ validator: the form builds it from the cart it is given.
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.utils import timezone
 
 from products.forms import StyledModelForm
 
@@ -142,7 +143,9 @@ class DiscountCodeForm(StyledModelForm):
     """Create or edit a discount code in the back office.
 
     The code is uppercased before the uniqueness check, so ``thoughts10``
-    collides with an existing ``THOUGHTS10`` as it should.
+    collides with an existing ``THOUGHTS10`` as it should. The expiry is
+    read in the store's time zone (``TIME_ZONE``), and its help text says
+    which zone that is.
     """
 
     code = DiscountCodeField(
@@ -162,6 +165,10 @@ class DiscountCodeForm(StyledModelForm):
         super().__init__(*args, **kwargs)
         self.fields["products"].queryset = self.fields["products"].queryset.order_by(
             "name"
+        )
+        self.fields["expires_at"].help_text = (
+            f"Store time ({timezone.get_current_timezone_name()}). "
+            "Leave empty to never expire."
         )
 
 
