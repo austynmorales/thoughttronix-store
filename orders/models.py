@@ -1,10 +1,66 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from products.models import Product
+
+from .validators import zip_validator
+
+US_STATES = [
+    ("AL", "Alabama"),
+    ("AK", "Alaska"),
+    ("AZ", "Arizona"),
+    ("AR", "Arkansas"),
+    ("CA", "California"),
+    ("CO", "Colorado"),
+    ("CT", "Connecticut"),
+    ("DE", "Delaware"),
+    ("DC", "District of Columbia"),
+    ("FL", "Florida"),
+    ("GA", "Georgia"),
+    ("HI", "Hawaii"),
+    ("ID", "Idaho"),
+    ("IL", "Illinois"),
+    ("IN", "Indiana"),
+    ("IA", "Iowa"),
+    ("KS", "Kansas"),
+    ("KY", "Kentucky"),
+    ("LA", "Louisiana"),
+    ("ME", "Maine"),
+    ("MD", "Maryland"),
+    ("MA", "Massachusetts"),
+    ("MI", "Michigan"),
+    ("MN", "Minnesota"),
+    ("MS", "Mississippi"),
+    ("MO", "Missouri"),
+    ("MT", "Montana"),
+    ("NE", "Nebraska"),
+    ("NV", "Nevada"),
+    ("NH", "New Hampshire"),
+    ("NJ", "New Jersey"),
+    ("NM", "New Mexico"),
+    ("NY", "New York"),
+    ("NC", "North Carolina"),
+    ("ND", "North Dakota"),
+    ("OH", "Ohio"),
+    ("OK", "Oklahoma"),
+    ("OR", "Oregon"),
+    ("PA", "Pennsylvania"),
+    ("RI", "Rhode Island"),
+    ("SC", "South Carolina"),
+    ("SD", "South Dakota"),
+    ("TN", "Tennessee"),
+    ("TX", "Texas"),
+    ("UT", "Utah"),
+    ("VT", "Vermont"),
+    ("VA", "Virginia"),
+    ("WA", "Washington"),
+    ("WV", "West Virginia"),
+    ("WI", "Wisconsin"),
+    ("WY", "Wyoming"),
+]
 
 
 class Cart(models.Model):
@@ -157,3 +213,103 @@ class OrderItem(models.Model):
     @property
     def line_total(self):
         return self.unit_price * self.quantity
+
+
+class AddressQuerySet(models.QuerySet):
+    def default_shipping(self):
+        """The default shipping address in this queryset, or ``None``."""
+        return self.filter(is_default_shipping=True).first()
+
+    def default_billing(self):
+        """The default billing address in this queryset, or ``None``."""
+        return self.filter(is_default_billing=True).first()
+
+    def save_unique(self, user, *, as_shipping=False, as_billing=False, **fields):
+        """Save an address to the user's book unless an identical one exists.
+
+        ``fields`` are the six address fields. An exact match on all of
+        them is reused rather than duplicated. Either way, the address
+        then claims each requested default slot the user hasn't filled —
+        an existing default is never replaced.
+        """
+        address = self.filter(user=user, **fields).first() or Address(
+            user=user, **fields
+        )
+        address.claim_empty_defaults(shipping=as_shipping, billing=as_billing)
+        address.save()
+        return address
+
+
+class Address(models.Model):
+    """A saved address in a customer's address book.
+
+    Untyped — any address serves for shipping or billing. Orders copy
+    the fields at checkout, so editing or deleting an address never
+    touches order history. Each customer has at most one default of
+    each kind; saving a new default moves it.
+    """
+
+    FIELDS = ["name", "street", "line2", "city", "state", "zip"]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="addresses",
+    )
+    name = models.CharField("Full name", max_length=100)
+    street = models.CharField("Street address", max_length=200)
+    line2 = models.CharField("Apt, suite, etc. (optional)", max_length=200, blank=True)
+    city = models.CharField("City", max_length=100)
+    state = models.CharField("State", max_length=2, choices=US_STATES)
+    zip = models.CharField("ZIP code", max_length=10, validators=[zip_validator])
+
+    is_default_shipping = models.BooleanField("Default shipping address", default=False)
+    is_default_billing = models.BooleanField("Default billing address", default=False)
+
+    objects = AddressQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name_plural = "addresses"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(is_default_shipping=True),
+                name="one_default_shipping_per_user",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(is_default_billing=True),
+                name="one_default_billing_per_user",
+            ),
+        ]
+
+    def __str__(self):
+        return self.summary
+
+    def save(self, *args, **kwargs):
+        """Save; a default flag set here is cleared from the user's other
+        addresses in the same transaction, so a default moves, never clashes."""
+        with transaction.atomic():
+            others = Address.objects.filter(user=self.user).exclude(pk=self.pk)
+            if self.is_default_shipping:
+                others.filter(is_default_shipping=True).update(
+                    is_default_shipping=False
+                )
+            if self.is_default_billing:
+                others.filter(is_default_billing=True).update(is_default_billing=False)
+            super().save(*args, **kwargs)
+
+    @property
+    def summary(self):
+        """One line for dropdowns, e.g. ``Ada Lovelace — 12 Main St, Austin, TX 78701``."""
+        street = f"{self.street}, {self.line2}" if self.line2 else self.street
+        return f"{self.name} — {street}, {self.city}, {self.state} {self.zip}"
+
+    def claim_empty_defaults(self, *, shipping=False, billing=False):
+        """Become the default of each requested kind the user hasn't set."""
+        others = Address.objects.filter(user=self.user).exclude(pk=self.pk)
+        if shipping and not others.filter(is_default_shipping=True).exists():
+            self.is_default_shipping = True
+        if billing and not others.filter(is_default_billing=True).exists():
+            self.is_default_billing = True

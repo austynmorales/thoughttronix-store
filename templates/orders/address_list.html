@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Your Addresses — The ThoughtTronix Store{% endblock %}
+
+{% block content %}
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <h1 class="text-3xl font-bold">Your Addresses</h1>
+    {% if addresses %}
+      <a href="{% url 'orders:address_create' %}" class="btn btn-primary btn-sm">Add address</a>
+    {% endif %}
+  </div>
+
+  {% if addresses %}
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+      {% for address in addresses %}
+        <div class="card bg-base-100 shadow-md">
+          <div class="card-body">
+            {% if address.is_default_shipping or address.is_default_billing %}
+              <div class="flex flex-wrap gap-2">
+                {% if address.is_default_shipping %}
+                  <span class="badge badge-primary">Default shipping</span>
+                {% endif %}
+                {% if address.is_default_billing %}
+                  <span class="badge badge-secondary">Default billing</span>
+                {% endif %}
+              </div>
+            {% endif %}
+            <address class="not-italic">
+              <p class="font-semibold">{{ address.name }}</p>
+              <p>{{ address.street }}</p>
+              {% if address.line2 %}<p>{{ address.line2 }}</p>{% endif %}
+              <p>{{ address.city }}, {{ address.state }} {{ address.zip }}</p>
+            </address>
+            <div class="card-actions mt-2 justify-end">
+              <a href="{% url 'orders:address_update' address.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+              <a href="{% url 'orders:address_delete' address.pk %}" class="btn btn-ghost btn-sm text-error">Delete</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="py-16 text-center">
+      <p class="text-5xl">🏠</p>
+      <p class="mt-4 text-xl font-semibold">No saved addresses yet</p>
+      <p class="mt-2 opacity-70">Tell us where you live. We'd find out anyway.</p>
+      <a href="{% url 'orders:address_create' %}" class="btn btn-primary btn-sm mt-6">
+        Add an address
+      </a>
+    </div>
+  {% endif %}
+{% endblock %}

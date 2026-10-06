@@ -21,7 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from orders.models import Cart, Order, OrderItem
+from orders.models import Address, Cart, Order, OrderItem
 from products.models import Category, Product, Tag
 
 TAGS = [
@@ -507,6 +507,7 @@ class Command(BaseCommand):
         self._create_catalog(tags)
         self._create_users()
         self._create_customer_cart()
+        self._create_customer_addresses()
         self._create_orders()
 
         self.stdout.write(
@@ -516,7 +517,8 @@ class Command(BaseCommand):
                 f"{Product.objects.count()} products, "
                 f"{get_user_model().objects.count()} users, "
                 f"{Order.objects.count()} orders, "
-                f"and a live cart for 'customer'."
+                f"and a live cart and {Address.objects.count()} saved addresses "
+                f"for 'customer'."
             )
         )
 
@@ -585,6 +587,28 @@ class Command(BaseCommand):
         cart = Cart.for_user(customer)
         for slug, quantity in CUSTOMER_CART:
             cart.items.create(product=Product.objects.get(slug=slug), quantity=quantity)
+
+    def _create_customer_addresses(self):
+        """Home (both defaults) and office, so checkout opens pre-filled.
+
+        Addresses go with their user, so ``_wipe`` clears them by cascade.
+        """
+        customer = get_user_model().objects.get(username="customer")
+        name = f"{customer.first_name} {customer.last_name}"
+        for (street, city, state, zip_code), is_home in [
+            (SEED_ADDRESSES[0], True),
+            (SEED_ADDRESSES[1], False),
+        ]:
+            Address.objects.create(
+                user=customer,
+                name=name,
+                street=street,
+                city=city,
+                state=state,
+                zip=zip_code,
+                is_default_shipping=is_home,
+                is_default_billing=is_home,
+            )
 
     def _create_orders(self):
         """Order history: 4 visible orders for 'customer', 48 background.

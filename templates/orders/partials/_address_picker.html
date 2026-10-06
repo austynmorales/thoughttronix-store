@@ -1,0 +1,13 @@
+{# "Fill from a saved address" — HTMX swaps the section's fields; shown only when the book has entries. #}
+{% if addresses %}
+  <select class="select w-full" name="address"
+          aria-label="Fill from a saved address"
+          hx-get="{% url 'orders:address_fields' %}"
+          hx-vals='{"section": "{{ section }}"}'
+          hx-target="#{{ section }}-fields">
+    <option value="" selected disabled>Fill from a saved address…</option>
+    {% for address in addresses %}
+      <option value="{{ address.pk }}">{{ address.summary }}</option>
+    {% endfor %}
+  </select>
+{% endif %}

@@ -1,6 +1,24 @@
 from django.contrib import admin
 
-from .models import Cart, CartItem, Order, OrderItem
+from .models import Address, Cart, CartItem, Order, OrderItem
+
+
+@admin.register(Address)
+class AddressAdmin(admin.ModelAdmin):
+    """Read-only: the address book belongs to its customer."""
+
+    list_display = ("user", "summary", "is_default_shipping", "is_default_billing")
+    list_filter = ("is_default_shipping", "is_default_billing")
+    search_fields = ("user__username", "name", "street", "city")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class CartItemInline(admin.TabularInline):

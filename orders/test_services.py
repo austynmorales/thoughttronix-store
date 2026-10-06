@@ -10,7 +10,7 @@ import pytest
 
 from products.models import Product
 
-from .models import CartItem, Order, OrderItem
+from .models import Address, CartItem, Order, OrderItem
 from .services import place_order
 from .test_checkout_form import VALID_DATA
 
@@ -128,3 +128,71 @@ def test_the_coupon_seam_is_accepted_and_ignored(cart, cart_item, checkout_data)
     order = place_order(cart, cart.user, checkout_data, coupon_code="THOUGHTS10")
 
     assert order.total == Decimal("699.98")
+
+
+# --- Saving to the address book ----------------------------------------------
+
+
+def test_nothing_is_saved_to_the_address_book_by_default(
+    cart, cart_item, checkout_data
+):
+    place_order(cart, cart.user, checkout_data)
+
+    assert not Address.objects.exists()
+
+
+def test_save_shipping_address_saves_it_as_the_default_shipping(
+    cart, cart_item, checkout_data
+):
+    place_order(cart, cart.user, checkout_data, save_shipping_address=True)
+
+    saved = cart.user.addresses.get()
+    assert saved.street == "12 Cortex Lane"
+    assert saved.line2 == "Unit 7"
+    assert saved.zip == "79015"
+    assert saved.is_default_shipping
+    assert not saved.is_default_billing
+
+
+def test_identical_shipping_and_billing_are_saved_once(cart, cart_item, checkout_data):
+    checkout_data["billing_zip"] = checkout_data["shipping_zip"]
+    checkout_data["billing_line2"] = checkout_data["shipping_line2"]
+
+    place_order(
+        cart,
+        cart.user,
+        checkout_data,
+        save_shipping_address=True,
+        save_billing_address=True,
+    )
+
+    saved = cart.user.addresses.get()
+    assert saved.is_default_shipping
+    assert saved.is_default_billing
+
+
+def test_a_failed_save_leaves_no_order_and_no_address(
+    cart, cart_item, checkout_data, monkeypatch
+):
+    """All-or-nothing covers the address book too."""
+    original = Address.objects.save_unique
+
+    def save_shipping_then_explode(user, **kwargs):
+        if kwargs.get("as_billing"):
+            raise RuntimeError("boom")
+        return original(user, **kwargs)
+
+    monkeypatch.setattr(Address.objects, "save_unique", save_shipping_then_explode)
+
+    with pytest.raises(RuntimeError):
+        place_order(
+            cart,
+            cart.user,
+            checkout_data,
+            save_shipping_address=True,
+            save_billing_address=True,
+        )
+
+    assert not Address.objects.exists()
+    assert not Order.objects.exists()
+    assert CartItem.objects.count() == 1

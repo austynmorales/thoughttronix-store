@@ -11,7 +11,7 @@ from typing import Any
 from django.contrib.auth.models import AbstractBaseUser
 from django.db import transaction
 
-from .models import Cart, Order, OrderItem
+from .models import Address, Cart, Order, OrderItem
 
 ADDRESS_FIELDS = [
     "email",
@@ -37,6 +37,8 @@ def place_order(
     checkout_data: Mapping[str, Any],
     *,
     coupon_code: str | None = None,
+    save_shipping_address: bool = False,
+    save_billing_address: bool = False,
 ) -> Order:
     """Create an order from the cart's contents, then empty the cart.
 
@@ -46,8 +48,14 @@ def place_order(
     only the last four digits are stored; the full number and CVV never
     touch the database.
 
+    ``save_shipping_address`` and ``save_billing_address`` also copy that
+    address into the user's address book — skipped when an identical
+    address is already saved, and claiming the matching default slot if
+    the user has none. Both default to ``False``: nothing is saved unless
+    asked.
+
     All-or-nothing: runs in a transaction, so a failure partway through
-    leaves no partial order and the cart intact.
+    leaves no partial order, no newly saved address, and the cart intact.
 
     Raises ``ValueError`` if the cart is empty or holds a product that is
     no longer available.
@@ -77,5 +85,18 @@ def place_order(
             unit_price=line.product.price,
             quantity=line.quantity,
         )
+    if save_shipping_address:
+        Address.objects.save_unique(
+            user, as_shipping=True, **_address_from(checkout_data, "shipping")
+        )
+    if save_billing_address:
+        Address.objects.save_unique(
+            user, as_billing=True, **_address_from(checkout_data, "billing")
+        )
     cart.items.all().delete()
     return order
+
+
+def _address_from(checkout_data: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+    """One section of the checkout as ``Address`` fields, prefix stripped."""
+    return {field: checkout_data[f"{prefix}_{field}"] for field in Address.FIELDS}
