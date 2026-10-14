@@ -46,17 +46,8 @@ via environs with working defaults — the app must run with no `.env` present.
 
 ## Template conventions
 
-- Every page extends the project-level `templates/base.html` (DaisyUI navbar,
-  footer motto). DaisyUI theme: `night`, set in `assets/css/source.css` and
-  `data-theme` on `<html>`.
-- Back-office pages extend `templates/backoffice/base.html` — the staff shell
-  with the tab rail; the active tab comes from the view's `section` context
-  entry.
-- HTMX endpoints render partials from `templates/<app>/partials/_<name>.html` —
-  prefixed with an underscore, never extending `base.html`.
-- Every list view gets a designed empty state, not a blank page.
-- Styling is Tailwind + DaisyUI classes only; no crispy-forms, no JavaScript
-  beyond HTMX.
+When creating or modifying templates, HTML, HTMX, or styling, read
+`docs/TEMPLATES.md` for template conventions.
 
 ## URL conventions
 
@@ -68,6 +59,5 @@ via environs with working defaults — the app must run with no `.env` present.
 
 ## Testing
 
-pytest + pytest-django. Shared fixtures live in the project-level
-`conftest.py` — plain fixtures, no factory-boy. Tests never invoke the seed
-command. The suite must be green at every phase boundary.
+When writing, modifying, or running tests, read `docs/TESTING.md` for
+testing conventions.
