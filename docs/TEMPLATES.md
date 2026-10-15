@@ -11,3 +11,11 @@
 - Every list view gets a designed empty state, not a blank page.
 - Styling is Tailwind + DaisyUI classes only; no crispy-forms, no JavaScript
   beyond HTMX.
+
+## Semantic Color Conventions
+
+Status and feedback must use DaisyUI semantic classes such as alert-*, badge-*, and text-error.
+
+Do not use raw Tailwind color classes such as bg-yellow-100 or text-red-500 for status and feedback messages.
+
+Apply this convention to all templates, not just recall notices.
