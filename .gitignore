@@ -9,6 +9,11 @@ __pycache__/
 # Django
 db.sqlite3
 staticfiles/
+media/
+
+# Marketing's original product PNGs; the shrunk copies in products/seed_images/
+# are what's committed.
+product-images/
 
 # Tailwind (downloaded CLI binary and compiled CSS)
 .django_tailwind_cli/

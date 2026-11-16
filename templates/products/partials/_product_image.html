@@ -1,0 +1,24 @@
+{% load static %}
+{% comment %}
+  Every product image — catalog card, detail page, back-office preview and
+  thumbnail — renders through this partial.
+
+  Context: product (required); lazy (True below the fold); img_class (extra
+  classes, e.g. a thumbnail width).
+
+  The 4:5 frame crops real photos and 4:3 placeholders alike in the browser;
+  width/height reserve the space so nothing shifts as images load. If the
+  file fails to load, onerror swaps in the category placeholder once (and
+  clears itself so a missing placeholder can't loop). This is the project's
+  one inline handler; under a Content Security Policy it would move into a
+  small static JS file.
+{% endcomment %}
+<img
+  src="{{ product.display_image_url }}"
+  alt="{{ product.name }}"
+  width="800"
+  height="1000"
+  class="aspect-[4/5] w-full object-cover {{ img_class }}"
+  {% if lazy %}loading="lazy"{% endif %}
+  onerror="this.onerror=null; this.src='{% static product.category.placeholder_image %}'"
+/>

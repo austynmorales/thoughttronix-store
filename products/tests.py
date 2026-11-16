@@ -223,7 +223,7 @@ def test_catalog_paginates_at_twelve(client, category):
 # --- The seed command -------------------------------------------------------
 
 
-def test_seed_builds_the_demo_world(db):
+def test_seed_builds_the_demo_world(db, media_root):
     call_command("seed")
 
     assert Category.objects.count() == 6
@@ -251,7 +251,7 @@ def test_seed_builds_the_demo_world(db):
     assert statuses == set(Order.Status.values)
 
 
-def test_seed_is_idempotent(db):
+def test_seed_is_idempotent(db, media_root):
     call_command("seed")
     first = (
         Category.objects.count(),
@@ -275,3 +275,31 @@ def test_seed_is_idempotent(db):
     )
 
     assert first == second
+    # The second run emptied media/products/ before re-attaching.
+    assert len(list((media_root / "products").iterdir())) == 12
+
+
+SEEDED_IMAGE_SLUGS = {
+    "seraphine",
+    "hush",
+    "mindsync",
+    "mindsync-duo",
+    "recallpro",
+    "moodset",
+    "dreamweaver",
+    "veil",
+    "calm-collar",
+    "crowdcalm-array",
+    "soulsear-mark-i",
+    "syncrest",
+}
+
+
+def test_seed_gives_the_twelve_mapped_products_images(db, media_root):
+    call_command("seed")
+
+    with_images = set(Product.objects.exclude(image="").values_list("slug", flat=True))
+    assert with_images == SEEDED_IMAGE_SLUGS
+    for product in Product.objects.filter(slug__in=SEEDED_IMAGE_SLUGS):
+        assert product.image.name.startswith(f"products/{product.slug}-")
+        assert product.image.storage.exists(product.image.name)

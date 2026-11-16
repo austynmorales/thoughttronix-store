@@ -1,0 +1,29 @@
+{% comment %}
+  The product form's image field: a preview of the stored image (or its
+  placeholder) when editing, the file input, its rules, its errors, and a
+  "Remove image" toggle when there is an image to remove.
+
+  Context: form (a ProductForm), field (its "image" BoundField).
+{% endcomment %}
+<div>
+  <label class="label mb-1" for="{{ field.id_for_label }}">{{ field.label }}</label>
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+    {% if form.preview_product %}
+      <div class="w-32 shrink-0 overflow-hidden rounded-box bg-base-200">
+        {% include "products/partials/_product_image.html" with product=form.preview_product %}
+      </div>
+    {% endif %}
+    <div class="flex-1 space-y-2">
+      {{ field }}
+      {% if field.help_text %}
+        <p class="text-xs opacity-60">{{ field.help_text }}</p>
+      {% endif %}
+      {% for error in field.errors %}
+        <p class="text-sm text-error">{{ error }}</p>
+      {% endfor %}
+      {% if form.preview_product.image %}
+        {% include "products/partials/_field.html" with field=form.remove_image %}
+      {% endif %}
+    </div>
+  </div>
+</div>

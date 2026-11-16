@@ -1,16 +1,46 @@
 """Project-wide pytest fixtures.
 
-Shared test data lives here as plain fixtures — no factories. The suite
-grows with the project; tests never invoke the seed command.
+Shared test data lives here as plain fixtures — no factories. Any test
+that saves an image — including the seed tests — uses ``media_root``.
 """
 
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from orders.models import Address, Cart, CartItem, DiscountCode
 from products.models import Category, Product, Tag
+
+
+@pytest.fixture
+def media_root(settings, tmp_path):
+    """Point MEDIA_ROOT at a throwaway directory so tests never touch media/."""
+    settings.MEDIA_ROOT = tmp_path / "media"
+    return settings.MEDIA_ROOT
+
+
+@pytest.fixture
+def make_image():
+    """Build an uploaded image in memory with Pillow — never read from disk.
+
+    Call it as ``make_image(width, height, format="PNG", mode="RGB",
+    name=None, exif=None)``; it returns a ``SimpleUploadedFile``.
+    """
+
+    def build(width=1000, height=1000, format="PNG", mode="RGB", name=None, exif=None):
+        buffer = BytesIO()
+        colors = {"RGB": (200, 50, 50), "RGBA": (200, 50, 50, 128)}
+        image = Image.new(mode, (width, height), colors.get(mode, 0))
+        save_kwargs = {"exif": exif} if exif is not None else {}
+        image.save(buffer, format=format, **save_kwargs)
+        name = name or f"upload.{format.lower()}"
+        return SimpleUploadedFile(name, buffer.getvalue())
+
+    return build
 
 
 @pytest.fixture

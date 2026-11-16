@@ -1,8 +1,9 @@
 """Seed the ThoughtTronix demo world.
 
-Destructive and idempotent: every run wipes the catalog and the demo
-accounts, then rebuilds the identical demo world. Run it whenever the
-database should return to a known state.
+Destructive and idempotent: every run wipes the catalog, the demo
+accounts, and ``media/products/``, then rebuilds the identical demo world
+— twelve products with images, the rest on their placeholders. Run it
+whenever the database should return to a known state.
 
 Demo logins (documented in the README):
 
@@ -14,8 +15,11 @@ Demo logins (documented in the README):
 import random
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
+from django.core.files import File
+from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -424,6 +428,11 @@ CATALOG = {
     ],
 }
 
+# Product images, pre-shrunk and committed: products/seed_images/<slug>.webp
+# attaches to the product with that slug. Every other product keeps its
+# category placeholder.
+SEED_IMAGES_DIR = Path(__file__).resolve().parents[2] / "seed_images"
+
 DEMO_USERS = [
     # (username, password, email, first, last, is_staff, is_superuser, job_title)
     ("admin", "admin123", "admin@example.com", "Ada", "Admin", True, True, None),
@@ -536,6 +545,7 @@ class Command(BaseCommand):
         self._wipe()
         tags = self._create_tags()
         self._create_catalog(tags)
+        self._attach_images()
         self._create_users()
         self._create_discount_codes()
         self._create_customer_cart()
@@ -569,6 +579,13 @@ class Command(BaseCommand):
         ]
         get_user_model().objects.filter(username__in=managed_usernames).delete()
 
+        # Empty media/products/ outright, so stray files from manual uploads
+        # don't pile up across runs. (Deleting the products above also
+        # schedules their files for deletion, but only once the seed commits.)
+        if default_storage.exists("products"):
+            for name in default_storage.listdir("products")[1]:
+                default_storage.delete(f"products/{name}")
+
     def _create_tags(self):
         return {
             name: Tag.objects.create(name=name, slug=slugify(name)) for name in TAGS
@@ -590,6 +607,19 @@ class Command(BaseCommand):
                     category=category,
                 )
                 product.tags.set(tags[tag_name] for tag_name in tag_names)
+
+    def _attach_images(self):
+        """Attach each seed image through the real upload path.
+
+        ``full_clean()`` runs the same validators as the back office and the
+        admin; ``save()`` runs the same processing (WebP, ≤ 1200 px, fresh name).
+        """
+        for path in sorted(SEED_IMAGES_DIR.glob("*.webp")):
+            product = Product.objects.get(slug=path.stem)
+            with path.open("rb") as file:
+                product.image = File(file, name=path.name)
+                product.full_clean()
+                product.save()
 
     def _create_users(self):
         User = get_user_model()

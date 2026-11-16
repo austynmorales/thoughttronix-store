@@ -10,10 +10,15 @@
       <h2 class="card-title">
         {% if form.instance.pk %}Edit &ldquo;{{ form.instance.name }}&rdquo;{% else %}New product{% endif %}
       </h2>
-      <form method="post" class="mt-2 space-y-4">
+      {# multipart: without it, the browser sends the file's name but not its contents. #}
+      <form method="post" enctype="multipart/form-data" class="mt-2 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-          {% include "products/partials/_field.html" %}
+          {% if field.name == "image" %}
+            {% include "products/partials/_image_field.html" %}
+          {% elif field.name != "remove_image" %}
+            {% include "products/partials/_field.html" %}
+          {% endif %}
         {% endfor %}
         <div class="mt-2 flex items-center justify-end gap-2">
           <a href="{% url 'products:manage_products' %}" class="btn btn-ghost">Cancel</a>

@@ -186,6 +186,119 @@ def test_name_is_required(client, staff_user, category):
     assert not Product.objects.exists()
 
 
+# --- Product images ----------------------------------------------------------
+
+
+def update_url(product):
+    return reverse("products:manage_product_update", kwargs={"pk": product.pk})
+
+
+def test_the_product_form_is_multipart_and_states_the_rules(
+    client, staff_user, product
+):
+    client.force_login(staff_user)
+
+    page = client.get(update_url(product)).content.decode()
+
+    assert 'enctype="multipart/form-data"' in page
+    assert 'class="file-input w-full"' in page
+    assert "at least 800 pixels on the shortest side" in page
+    # The preview shows the placeholder; nothing to remove yet.
+    assert "/static/images/placeholders/home-assistants.svg" in page
+    assert "Remove image" not in page
+
+
+def test_staff_can_upload_an_image(client, staff_user, product, media_root, make_image):
+    client.force_login(staff_user)
+    data = product_data(product.category, name=product.name, slug=product.slug)
+
+    response = client.post(update_url(product), {**data, "image": make_image()})
+
+    assert response.status_code == HTTPStatus.FOUND
+    product.refresh_from_db()
+    assert product.image.name.endswith(".webp")
+
+
+def test_an_invalid_upload_rerenders_with_the_error_and_input_kept(
+    client, staff_user, product, media_root, make_image
+):
+    client.force_login(staff_user)
+    data = product_data(product.category, name=product.name, slug=product.slug)
+    data["price"] = "299.99"
+
+    response = client.post(update_url(product), {**data, "image": make_image(500, 400)})
+
+    assert response.status_code == HTTPStatus.OK
+    page = response.content.decode()
+    assert "This image is 500×400 pixels." in page
+    assert 'value="299.99"' in page  # the other edit survives
+    # The preview still shows what's stored, not the rejected upload.
+    assert "/static/images/placeholders/home-assistants.svg" in page
+    product.refresh_from_db()
+    assert not product.image
+    assert product.price == Decimal("349.99")
+
+
+def test_staff_can_remove_an_image(client, staff_user, product, media_root, make_image):
+    product.image = make_image()
+    product.save()
+    client.force_login(staff_user)
+    assert "Remove image" in client.get(update_url(product)).content.decode()
+
+    data = product_data(product.category, name=product.name, slug=product.slug)
+    client.post(update_url(product), {**data, "remove_image": "on"})
+
+    product.refresh_from_db()
+    assert not product.image
+
+
+def test_uploading_and_removing_at_once_is_rejected(
+    client, staff_user, product, media_root, make_image
+):
+    product.image = make_image()
+    product.save()
+    stored = product.image.name
+    client.force_login(staff_user)
+    data = product_data(product.category, name=product.name, slug=product.slug)
+
+    response = client.post(
+        update_url(product), {**data, "image": make_image(), "remove_image": "on"}
+    )
+
+    assert "not both" in response.content.decode()
+    product.refresh_from_db()
+    assert product.image.name == stored
+
+
+def test_editing_without_a_file_keeps_the_image(
+    client, staff_user, product, media_root, make_image
+):
+    product.image = make_image()
+    product.save()
+    stored = product.image.name
+    client.force_login(staff_user)
+
+    data = product_data(product.category, name=product.name, slug=product.slug)
+    client.post(update_url(product), {**data, "price": "1.00"})
+
+    product.refresh_from_db()
+    assert product.image.name == stored
+    assert product.price == Decimal("1.00")
+
+
+def test_the_product_list_shows_lazy_thumbnails(
+    client, staff_user, product, media_root, make_image
+):
+    product.image = make_image()
+    product.save()
+    client.force_login(staff_user)
+
+    page = client.get(reverse("products:manage_products")).content.decode()
+
+    assert f'src="{product.image.url}"' in page
+    assert 'loading="lazy"' in page
+
+
 # --- Categories and tags -----------------------------------------------------
 
 

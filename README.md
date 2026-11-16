@@ -24,7 +24,9 @@ takes about two minutes.
 
 ## Demo logins
 
-The `seed` command creates a fixed demo world — the same one every run:
+The `seed` command creates a fixed demo world — the same one every run,
+including product images for twelve products (uploads live in the
+gitignored `media/` folder, served by the dev server):
 
 | Username   | Password      | Who they are                                                  |
 | ---------- | ------------- | ------------------------------------------------------------- |
@@ -48,8 +50,8 @@ The `seed` command creates a fixed demo world — the same one every run:
 ## Repo layout
 
 `config/` is the project package (settings, root URLs); the four apps are
-`accounts` (custom user model), `products` (the public catalog and its
-back-office CRUD), `orders` (cart, checkout, orders — with the
+`accounts` (custom user model), `products` (the public catalog, its
+back-office CRUD, and product images), `orders` (cart, checkout, orders — with the
 `place_order` service in `orders/services.py`), and `dashboard` (staff
 analytics, with the aggregations in `dashboard/queries.py`). Project-level
 templates live in `templates/`, static sources in `assets/`. The product

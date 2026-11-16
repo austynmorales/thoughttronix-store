@@ -18,6 +18,7 @@
       <table class="table">
         <thead>
           <tr>
+            <th><span class="sr-only">Image</span></th>
             <th>Product</th>
             <th>Category</th>
             <th>Price</th>
@@ -28,6 +29,11 @@
         <tbody>
           {% for product in products %}
             <tr>
+              <td class="w-16">
+                <div class="w-12 overflow-hidden rounded">
+                  {% include "products/partials/_product_image.html" with lazy=True %}
+                </div>
+              </td>
               <td>
                 <a href="{% url 'products:manage_product_update' product.pk %}"
                    class="link-hover font-semibold">{{ product.name }}</a>

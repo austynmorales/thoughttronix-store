@@ -20,7 +20,15 @@ A server-rendered Django 6 storefront and back office. The PRD (`prd/core-platfo
   `job_title`). Roles are Django's own vocabulary: customers are plain users,
   employees are `is_staff`, the admin is `is_superuser`. No role field, no Groups.
 - `products/` — catalog (`Category`, `Product`, `Tag`), its back-office CRUD,
-  and the `seed` command
+  and the `seed` command. `Product.image` is one optional image:
+  `products/validators.py` holds the upload rules (on the model field, so the
+  back office, admin, and `seed` all enforce them); `Product.save()`
+  normalizes new uploads to WebP and deletes replaced files on commit. Every
+  product image renders through `templates/products/partials/_product_image.html`.
+- `products/seed_images/` — the twelve committed demo images,
+  `<slug>.webp`; `seed` attaches each to the product with that slug
+- `media/` — uploaded files (`MEDIA_ROOT`), gitignored, served only while
+  `DEBUG` is on. Tests use the `media_root` fixture and never write here.
 - `orders/` — cart, checkout, orders, discount codes, and back-office order
   and discount-code management
 - `dashboard/` — the staff analytics dashboard
@@ -48,6 +56,13 @@ via environs with working defaults — the app must run with no `.env` present.
 
 When creating or modifying templates, HTML, HTMX, or styling, read
 `docs/TEMPLATES.md` for template conventions.
+
+## Product image guideline
+
+Product photos, not ads: no marketing text baked into the image — the name,
+tagline, and description already sit beside it. (A content guideline for
+employees, not enforced in code. Seraphine and Veil currently carry text and
+should be replaced when text-free versions exist.)
 
 ## URL conventions
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load cart_extras humanize static %}
+{% load cart_extras humanize %}
 
 {% block title %}
   {% if category %}{{ category.name }}{% else %}Catalog{% endif %} — The ThoughtTronix Store
@@ -60,8 +60,8 @@
     {% for product in products %}
       <div class="card bg-base-100 shadow-md transition-shadow hover:shadow-xl">
         <figure>
-          <a href="{{ product.get_absolute_url }}">
-            <img src="{% static product.category.placeholder_image %}" alt="{{ product.name }}" />
+          <a href="{{ product.get_absolute_url }}" class="block w-full">
+            {% include "products/partials/_product_image.html" with lazy=True %}
           </a>
         </figure>
         <div class="card-body">
