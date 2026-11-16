@@ -1,3 +1,67 @@
+# Product Images
+
+## Question 1 - One decision from grill me
+During the Grill Me interview, one important decision I made was how the website should handle missing product images. Claude originally recommended allowing a broken image to appear if the uploaded file was missing. I disagreed because i thought broken images would make the website look unfinished and could confuse customers. Instead, I decided the website should display the existing category placeholder whenever an image fails to load. This decision helped keep the product catalog lookin consisten and professinal. The feature uses an error handler to automacitcally switch to the placeholder without checking the server for missing files every time a page loads.
+
+## Question 2 - Find the upload code
+Part 1 - ImageField
+The ImageField is located in products/models.py, starting on line 104.
+    image = models.ImageField(
+        upload_to=product_image_path,
+        blank=True,
+        max_length=255,
+        validators=[
+            validate_image_format,
+            validate_image_file_size,
+            validate_image_megapixels,
+            validate_image_min_size,
+        ],
+    )
+The upload_to=product_image_path setting tells Django where to store uploaded product images. The function product_image_path, defined on line 68, generates a unique filename using the product's slug and a random identifier. The uploaded image is then saved inside the media/products/folder.
+
+Part 2 - HTML Upload Form
+
+The opening form tag is located in templates/products/manage_product_form.html, line 14.
+
+<form method="post" enctype="multipart/form-data" class="mt-2 space-y-4">
+
+The enctype="multipart/form-data" attribute is necessary because it allows the browser to send uploaded image files along with the other information entered in the product form. Without this attribute, Django would not receive the image correctly through request.FILES, and the upload would not work.
+
+## Question 3 - Follow the upload process
+1. Where the image is stored on disk
+
+My NeuroBand X image is saved at:
+C:/Users/moral/thoughttronix-store/thoughttronix-store/media/products/neuroband-x-8234a5f483c51904.webp
+
+The MEDIA_ROOT setting in config/settings.py, line 144, determines wehre uploaded images are stored. It uses the project's BASE_DIR, which is defined on line 15, and adds the media folder.
+
+2. What the database stores
+
+The database stores this value for my image:
+
+products/neuroband-x-8234a5f483c51904.webp
+
+The database stores the image's relative file path instead of the actual image file. The Product.image field is defined in products/models.py, beginning on line 104. The upload_to setting calls the product_image_path function on lines 68-76. This function creates a unique filename using the product's slug and a random identifier.
+
+3. The URL the browser requests
+
+The browser requests:
+
+http://127.0.0.1:8000/media/products/neuroband-x-8234a5f483c51904.webp
+
+The MEDIA_URL setting is defined in config/settings.py, line 146. The display_image_url property in products/models.py, lines 174-178, gets the image URL. The template
+templates/products/partials/_product_image.html, line 17, uses that URL to display the image.
+
+How Django serves the image
+
+In config/urls.py, line 27, the following code allows Django to serve uploaded images during development:
+
+urlpatters += static(settings.MEDIA_URL, document_root=settings.MEDIAT_ROOT)
+
+This connects the media URL to the folder containing uploaded images. When the browser requests the image, Django reads the file from the media folder and sends it to the browser.
+
+This works while Django's DEBUG setting is enabled. The setting is defined in config/settings.py, line 26.
+
 # Discount Coupons
 
 ## Question 1 - One decision from grill me
