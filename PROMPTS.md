@@ -28,6 +28,91 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-15 — Product images: design interview, PRD and plan, handoff (no implementation)
+
+### Prompts
+
+1. `/grill-me` "i need to add real product images to the thoughttronix
+   store. the images are already in the product-images folder in the
+   project directory. products should display their uploaded images when
+   available and use the existing placeholder when no image exists.
+   employees need to be able to upload product images through the back
+   office. invalid image files should be rejected with a clear error
+   message. images should look consistent across the catalog, and the
+   website should remain fast."
+2. "a" — Q1, how many images: one optional image per product.
+3. "b" — Q2, processing: resize to ≤ 1200 px and store as WebP once, at
+   upload time; originals discarded.
+4. "a" — Q3, consistency: fixed frame, cropped in the browser
+   (`aspect-ratio` + `object-cover`).
+5. "a" — Q4, frame shape: 4:5 portrait, also on the detail page.
+6. "b" — Q5, invalid files: JPEG/PNG/WebP by contents, ≤ 10 MB, ≥ 800 px
+   shortest side, one specific message per rule.
+7. "b" — Q6, old files: deleted automatically via `transaction.on_commit`.
+8. "c" — Q7, filenames: `products/<slug>-<random token>.webp`.
+9. "c" — Q8, seed: pre-shrunk images committed as
+   `products/seed_images/<slug>.webp`, loaded through the real upload path.
+10. "a" — Q9, SyncRest uses the "No Text" image; guideline "product
+    photos, not ads".
+11. "c" — Q10, back office: styled field with preview and rules up front,
+    plus a thumbnail column in the product list.
+12. "b" — Q11, code location: validators on the model field
+    (`products/validators.py`), processing in the model, one
+    `display_image_url` property.
+13. "change number 9: if an upload image is missing or unavailable, display
+    the existing category placeholder instead of a broken image. keep the
+    implementation simple an avoid unnecessary filesystem checks on every
+    request."
+14. "save both the prd and the plan"
+15. "commit both files"
+16. `/handoff` "the next session implements the design we just agreed"
+17. "no do not commit HANDOFF.md because it is a temporary file. Please
+    read the header of PROMPTS.md and follow its standard session-log
+    instructions to document this Grill Me design session. do not begin
+    implementation yet."
+
+### Summary
+
+- **Outcome:** A complete design for product images, with no code written.
+  `prd/product-images.md` and `plans/product-images.md` (six phases) were
+  committed to `main` in `fecf7f4`, which has not been pushed.
+  `HANDOFF.md` was written for the next session, which will implement
+  the design, and is deliberately left uncommitted as a temporary file.
+  The `product-images/` source folder is still untracked; deleting or
+  gitignoring it is deferred to Phase 6, where the user will be asked.
+  Before asking anything, the agent explored the codebase. It found no
+  media support or Pillow, 4:3 placeholder SVGs, and images only in the
+  catalog and detail templates. It also found 13 source PNGs of about
+  2 MB each, mostly 4:5. The agent viewed the ambiguous images to propose
+  the image-to-product mapping.
+- **Deviations:** All eleven answers matched the recommended option. The
+  user changed one bundled default in Q12. Item #9 originally said a
+  missing file shows a broken image; it now falls back to the category
+  placeholder via a client-side `onerror`, with no server-side file
+  checks. The SoulSear → Mark I mapping was put to the user in Q9, but
+  the user answered only "a". The agent treated that silence as
+  confirmation and said so. The user declined the offer to commit
+  `HANDOFF.md`.
+- **Sideways:**
+  - The `grill-me` skill says to ask one question at a time. Q9 bundled
+    the SyncRest choice with a request to confirm the mapping table. Q12
+    bundled ten small defaults into one confirm-or-change question. That
+    was efficient, but it departed from the skill's format, and the
+    user's one correction came out of that bundle.
+  - While writing the PRD and plan, the agent made three implementation
+    calls that were not discussed in the interview. These were a
+    `post_delete` receiver for file cleanup, `max_length=255` with a
+    truncated slug, and a temporary-`MEDIA_ROOT` fixture applied to the
+    existing seed tests. All three were reported after the files were
+    saved, not before.
+  - A `cd` inside a Bash call changed the session's working directory to
+    `assets/images/placeholders`. The agent caught it from the
+    environment update and switched to absolute paths. No files were
+    affected.
+  - The "~2 MB total" size for the seed images, and the ~100–200 KB per
+    image, are estimates that the PRD repeats. They have not been
+    measured; Phase 6 is where they get checked.
+
 ## 2026-10-05 — Discount codes: design interview, checkout/back-office implementation, store time zone
 
 ### Prompts
