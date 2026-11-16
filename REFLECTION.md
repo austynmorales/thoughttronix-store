@@ -1,7 +1,7 @@
 # Product Images
 
 ## Question 1 - One decision from grill me
-During the Grill Me interview, one important decision I made was how the website should handle missing product images. Claude originally recommended allowing a broken image to appear if the uploaded file was missing. I disagreed because i thought broken images would make the website look unfinished and could confuse customers. Instead, I decided the website should display the existing category placeholder whenever an image fails to load. This decision helped keep the product catalog lookin consisten and professinal. The feature uses an error handler to automacitcally switch to the placeholder without checking the server for missing files every time a page loads.
+During the Grill Me interview, one important decision I made was how the website should handle missing product images. Claude originally recommended allowing a broken image to appear if the uploaded file was missing. I disagreed because I thought broken images would make the website look unfinished and could confuse customers. Instead, I decided the website should display the existing category placeholder whenever an image fails to load. This decision helped keep the product catalog looking consistent and professional. The feature uses an error handler to automatically switch to the placeholder without checking the server for missing files every time a page loads.
 
 ## Question 2 - Find the upload code
 Part 1 - ImageField
@@ -33,7 +33,7 @@ The enctype="multipart/form-data" attribute is necessary because it allows the b
 My NeuroBand X image is saved at:
 C:/Users/moral/thoughttronix-store/thoughttronix-store/media/products/neuroband-x-8234a5f483c51904.webp
 
-The MEDIA_ROOT setting in config/settings.py, line 144, determines wehre uploaded images are stored. It uses the project's BASE_DIR, which is defined on line 15, and adds the media folder.
+The MEDIA_ROOT setting in config/settings.py, line 144, determines where uploaded images are stored. It uses the project's BASE_DIR, which is defined on line 15, and adds the media folder.
 
 2. What the database stores
 
@@ -56,7 +56,7 @@ How Django serves the image
 
 In config/urls.py, line 27, the following code allows Django to serve uploaded images during development:
 
-urlpatters += static(settings.MEDIA_URL, document_root=settings.MEDIAT_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 This connects the media URL to the folder containing uploaded images. When the browser requests the image, Django reads the file from the media folder and sends it to the browser.
 
